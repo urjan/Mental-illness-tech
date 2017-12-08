@@ -36,10 +36,9 @@ datahealth <- read.csv("survey.csv", header=T)
 ```
 
 ```{r}
-#summary(datahealth)
+summary(datahealth)
 data1 <- datahealth
 dim(datahealth)
-# class(data1$Age)
 names(data1)
 ```
 
@@ -78,7 +77,8 @@ data1$work_interfere[is.na(data1$work_interfere)] <- "Never"
 data1$work_interfere <- as.factor(data1$work_interfere)
 summary(data1$work_interfere)
 ```
-Out of the 1251 samples, we are reserving 1000 samples for training and 251 samples for testing
+
+Out of the 1251 samples, we are reserving 1000 samples for training and 251 samples for testing.
 ```{r}
 set.seed(1)
 n <- nrow(data1)
@@ -94,6 +94,11 @@ x.test <- health.test[,-6]
 y.test <- health.test$treatment
 ```
 
+```{r}
+#Creating a dataframe to save results of each method in order to plot a graph
+success <- data.frame(methods=c("Logistic Regression","Single Tree", "Random Forest","Bagging"), percentages=c(0,0,0,0))
+```
+
 Linear model:
 
 ```{r}
@@ -103,11 +108,7 @@ Linear model:
 Logistic regression:
 ```{r}
 fit0 <- glm(treatment~ ., data = health.train, family=binomial(logit))
-# prediction <- predict(fit0, data = health.test)
-#sum(prediction.lr!=y.test)/length(prediction.lr)
-
 Anova(fit0) #Perform Anova to get significant variables 
-
 ```
 Since state and self_employed have NA values but are not significant at the 0.05 level, we can remove these columns from our data.
 
@@ -117,7 +118,6 @@ health.train <- health.train[, -c(3,4)]
 health.test <- health.test[, -c(3,4)]
 x.train <- x.train[, -c(3,4)]
 x.test <- x.test[, -c(3,4)]
-dim(health.train)
 ```
 
 
@@ -129,21 +129,39 @@ fit1 <- glm(treatment ~ family_history + work_interfere + benefits + care_option
 Anova(fit1) #Anonymity is not significant. Remove it.
 
 fit2 <- glm(treatment ~ family_history + work_interfere + benefits + care_options + seek_help , data = health.train, family=binomial(logit))
-Anova(fit2)
+Anova(fit2) #seek_help is not significant. Remove it. 
 
 fit3 <- glm(treatment ~ family_history + work_interfere + benefits + care_options  , data = health.train, family=binomial(logit))
 Anova(fit3) #All variables significant at 0.05 level
-fit1.roc <- roc(health.train$treatment, fit1$fitted, plot=T, col="blue")
-predict(fit3, health.test)
-roccurve <- roc(health.test$treatment ~ predict(fit3, health.test)) 
-plot(roccurve)
+
+fit1.roc <- roc(health.train$treatment, fit1$fitted, plot=F)
+fit2.roc <- roc(health.train$treatment, fit2$fitted, plot=F)
+fit3.roc <- roc(health.train$treatment, fit3$fitted, plot=F)
+#Not much difference between the 3 fits.
+plot(1-fit1.roc$specificities, fit1.roc$sensitivities, col="red", pch=16, cex=.7,
+     xlab="False Positive",
+     ylab="Sensitivity")
+points(1-fit2.roc$specificities, fit2.roc$sensitivities, col="blue", pch=16, cex=.6)
+points(1-fit3.roc$specificities, fit3.roc$sensitivities, col="green", pch=16, cex=.6)
+
+title("Red is for fit1, blue is for fit2, and green is for fit3")
+# roccurve <- roc(health.test$treatment ~ predict(fit3, health.test))
+# plot(roccurve)
+
+fit.pred <- rep("No", 1000)
+fit.pred[fit3$fitted > 2/3]="Yes"
+MCE = (sum((fit.pred[health.train$treatment == "Yes"] != "Yes"))
+         + sum((fit.pred[health.train$treatment == "No"] != "No")))/length(health.train$treatment)
+MCE #0.191
+success$percentages[success$methods == "Logistic Regression"] <- (100 - MCE*100)
+
 ```
 
 Single tree:
 
 ```{r}
 set.seed(1)
-fit.single <- randomForest(treatment~., health.train, mtry=4, ntree=1)
+fit.single <- randomForest(treatment~., health.train, mtry=2, ntree=1)
 ```
 
 ```{r}
@@ -151,44 +169,45 @@ names(fit.single)
 fit.single$mtry
 fit.single$votes[1:20, ]   #  prob of 0 and 1 using oob's
 fit.single$predicted[1:20] #  lables using oob's and majority vote. Notice those with NA because they are not in any OOB's
-fit.single$err.rate #      #  mis-classification errors of oob's/0/1
+fit.single$err.rate[1,]["OOB"]  #  mis-classification errors of oob's/0/1
 predict(fit.single, health.test)[1:20]  # prediction by using the RF based on all the training data.
 
 data.frame(fit.single$votes[1:20, ], fit.single$predicted[1:20], predict(fit.single, health.test)[1:20] )
 
+success$percentages[success$methods == "Single Tree"] <- (100 - 100*fit.single$err.rate[1,]["OOB"])
 
 ```
 
 Random forests:
 ```{r}
 
-health.rf <- train(treatment~., data=health.train, method="rf", metric="Accuracy", ntree=20)
-plot(health.rf)
-predict.rf <- predict(health.rf, health.test)
+health.rf <- train(treatment~., data=health.train, method="rf",
+metric="Accuracy", ntree=20) plot(health.rf) predict.rf <- predict(health.rf,
+health.test)
 
-##Test accuracy:
-sum(predict.rf!=y.test)/length(predict.rf)
+#Accuracy
 confusionMatrix(predict.rf, health.test$treatment)$overall[1]
 
-#roc(voice.test$label, prediction.rf, plot=TRUE) 
+success$percentages[success$methods == "Random Forest"] <- confusionMatrix(predict.rf, health.test$treatment)$overall[1]*100
 
 ```
 
 Bagging:
 
 ```{r}
-bag.model <- train(treatment ~ .,  data=health.train)
-predict.bag <- predict.bagging(bag.model, health.test)
-# sum(predict.bag!=y.test)/length(predict.bag)
-# confusionMatrix(predict.bag, health.test$treatment)$overall
-# predict.bag
-health.test$treatment
-class(health.test$treatment)
-confusionMatrix(predict.bag, health.test$treatment)$overall[1]
-# confusionMatrix(predict.bag, health.test$treatment)
+bag.model <- bagging(treatment ~ .,  data=health.train)
+predict.bag <- predict(bag.model, health.test, type="class")
+sum(predict.bag!=y.test)/length(predict.bag)
+confusionMatrix(predict.bag, health.test$treatment)$overall
+
+
+sum(predict.bag!=y.test)/length(predict.bag)
+success$percentages[success$methods == "Bagging"] <- confusionMatrix(predict.bag$class, health.test$treatment)$overall[1]*100
 
 ```
+Lets plot our success rates for different methods:
 
+```{r}
 
-
+ggplot(success, aes(x=methods, y=percentages)) + geom_bar(stat="identity", fill=c("yellowgreen", "hotpink2", "dodgerblue3", "orange2"), width = 0.2) + coord_flip() + theme(legend.position = "none") + geom_text(aes(label = format(round(percentages, 2), nsmall = 2)), size = 3, hjust = 3, vjust = 3)
 ```
