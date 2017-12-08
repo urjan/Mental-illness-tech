@@ -1,0 +1,194 @@
+---
+title: "Mental Health in Tech"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+Inlcude all the libraries here:
+```{r results="hide"}
+if (!require("pacman")) install.packages("pacman")
+pacman::p_load(adabag)
+library(leaps)
+library(data.table)
+library(dplyr)
+library(randomForest)
+library(ggplot2)
+library(adabag)
+library(corrplot)
+library(caret)
+library(pROC)
+library(tree)
+library(car)
+library(rpart)
+library(glmnet)
+```
+
+###Exploratory Data Analysis:
+
+Let us first read and understand the data:
+
+```{r}
+
+datahealth <- read.csv("survey.csv", header=T)
+```
+
+```{r}
+#summary(datahealth)
+data1 <- datahealth
+dim(datahealth)
+# class(data1$Age)
+names(data1)
+```
+
+
+```{r}
+
+#CHANGE!!!!
+GenMale <- c("cis male", "Cis Male", "Cis Man", "m", "M", "Mail", "maile", "Make", "Mal", "male", "Male", "Male ", "Male (CIS)", "Malr", "Man", "msle")
+GenFemale <- c("cis-female/femme", "Cis Female", "f", "F", "femail", "Femake", "female", "Female", "Female ", "Female (cis)", "Female (trans)", "Trans-female", "Trans woman", "woman", "Woman")
+ 
+# Assigning the entries according to "categories"
+data1$newgender <-
+  ifelse((data1$Gender %in% GenMale), "Male", # Assigning "Male" to those who entered a string contained in GenMale
+  ifelse((data1$Gender %in% GenFemale), "Female", "Non-M/F")) %>% # Assigning "Female" to those who entered a string contained in GenFemale
+  as.factor()
+ 
+# Observing cleaned table
+table(data1$newgender)
+
+```
+```{r}
+#Clean the age column to eliminate spurious values like negatives and ages above 120
+data1 = data1[(data1$Age > 15) & (data1$Age < 120),]
+dim(data1)
+data1 = subset(data1, select=-c(Gender, Timestamp, comments))
+data1 <- data1 %>% rename(Gender = newgender )
+names(data1)
+na.omit(data1)
+dim(data1)
+sapply(data1, class)
+```
+```{r}
+names(data1)
+data1$work_interfere <- as.character(data1$work_interfere)
+data1$work_interfere[is.na(data1$work_interfere)] <- "Never"
+data1$work_interfere <- as.factor(data1$work_interfere)
+summary(data1$work_interfere)
+```
+Out of the 1251 samples, we are reserving 1000 samples for training and 251 samples for testing
+```{r}
+set.seed(1)
+n <- nrow(data1)
+
+train.index <- sample(n,1000)
+health.train <- data1[train.index,]
+health.test <- data1[-train.index,]
+
+x.train <- health.train[,-6]
+y.train <- health.train$treatment
+
+x.test <- health.test[,-6]
+y.test <- health.test$treatment
+```
+
+Linear model:
+
+```{r}
+#???
+```
+
+Logistic regression:
+```{r}
+fit0 <- glm(treatment~ ., data = health.train, family=binomial(logit))
+# prediction <- predict(fit0, data = health.test)
+#sum(prediction.lr!=y.test)/length(prediction.lr)
+
+Anova(fit0) #Perform Anova to get significant variables 
+
+```
+Since state and self_employed have NA values but are not significant at the 0.05 level, we can remove these columns from our data.
+
+```{r}
+data1 <- data1[, -c(3,4)]
+health.train <- health.train[, -c(3,4)]
+health.test <- health.test[, -c(3,4)]
+x.train <- x.train[, -c(3,4)]
+x.test <- x.test[, -c(3,4)]
+dim(health.train)
+```
+
+
+Picking out only the significant variables, we get a better model with the variables - family_history, work_interfere, benefits, care_options, seek_help, anonymity.
+
+```{r}
+
+fit1 <- glm(treatment ~ family_history + work_interfere + benefits + care_options + seek_help + anonymity, data = health.train, family=binomial(logit))
+Anova(fit1) #Anonymity is not significant. Remove it.
+
+fit2 <- glm(treatment ~ family_history + work_interfere + benefits + care_options + seek_help , data = health.train, family=binomial(logit))
+Anova(fit2)
+
+fit3 <- glm(treatment ~ family_history + work_interfere + benefits + care_options  , data = health.train, family=binomial(logit))
+Anova(fit3) #All variables significant at 0.05 level
+fit1.roc <- roc(health.train$treatment, fit1$fitted, plot=T, col="blue")
+predict(fit3, health.test)
+roccurve <- roc(health.test$treatment ~ predict(fit3, health.test)) 
+plot(roccurve)
+```
+
+Single tree:
+
+```{r}
+set.seed(1)
+fit.single <- randomForest(treatment~., health.train, mtry=4, ntree=1)
+```
+
+```{r}
+names(fit.single)
+fit.single$mtry
+fit.single$votes[1:20, ]   #  prob of 0 and 1 using oob's
+fit.single$predicted[1:20] #  lables using oob's and majority vote. Notice those with NA because they are not in any OOB's
+fit.single$err.rate #      #  mis-classification errors of oob's/0/1
+predict(fit.single, health.test)[1:20]  # prediction by using the RF based on all the training data.
+
+data.frame(fit.single$votes[1:20, ], fit.single$predicted[1:20], predict(fit.single, health.test)[1:20] )
+
+
+```
+
+Random forests:
+```{r}
+
+health.rf <- train(treatment~., data=health.train, method="rf", metric="Accuracy", ntree=20)
+plot(health.rf)
+predict.rf <- predict(health.rf, health.test)
+
+##Test accuracy:
+sum(predict.rf!=y.test)/length(predict.rf)
+confusionMatrix(predict.rf, health.test$treatment)$overall[1]
+
+#roc(voice.test$label, prediction.rf, plot=TRUE) 
+
+```
+
+Bagging:
+
+```{r}
+bag.model <- train(treatment ~ .,  data=health.train)
+predict.bag <- predict.bagging(bag.model, health.test)
+# sum(predict.bag!=y.test)/length(predict.bag)
+# confusionMatrix(predict.bag, health.test$treatment)$overall
+# predict.bag
+health.test$treatment
+class(health.test$treatment)
+confusionMatrix(predict.bag, health.test$treatment)$overall[1]
+# confusionMatrix(predict.bag, health.test$treatment)
+
+```
+
+
+
+```
