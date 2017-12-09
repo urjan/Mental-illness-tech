@@ -24,6 +24,8 @@ library(tree)
 library(car)
 library(rpart)
 library(glmnet)
+library(plotly)
+library(corrplot)
 ```
 
 ###Exploratory Data Analysis:
@@ -41,7 +43,6 @@ data1 <- datahealth
 dim(datahealth)
 names(data1)
 ```
-
 
 ```{r}
 
@@ -78,6 +79,117 @@ data1$work_interfere <- as.factor(data1$work_interfere)
 summary(data1$work_interfere)
 ```
 
+
+Let us see the distribution of data with respect to tech and non-tech companies:
+```{r}
+bar <- ggplot(data=data1, aes(x = sum(tech_company =="Yes"), fill = tech_company)) + geom_bar(width = 0.2) +coord_fixed(ratio = 0.2)
+pie <- bar + coord_polar("y", start=0) +theme_void()
+pie
+```
+Clearly, our data is skewed in favor of the tech companies.
+
+Let us se the distribution of data with respect to the number individuals seeking treatment for mental illnesses:
+```{r}
+bar <- ggplot(data=data1, aes(x = sum(treatment =="Yes"), fill = treatment)) + geom_bar(width = 0.2) +coord_fixed(ratio = 0.2) 
+pie <- bar + coord_polar("y", start=0) + theme_void() + scale_fill_manual(values=c("#999999", "#E69F00"))
+pie
+```
+We have close to even distribution of data with respect to individuals seeking treatment.
+
+
+
+
+What is the percentage of folks with a Family history of mental illnesses?
+```{r}
+
+colors1 <- c("No" = "#fffff", "Yes" = "qqqqq", "Maybe" = "#11111", "Not sure" = "#11111", "Don't know" = "#11111")
+ 
+
+data1 %>%
+  count(family_history) %>% 
+  plot_ly(
+    labels = ~family_history,
+    values = ~n,
+    type = "pie",
+    textposition = 'inside',
+    textinfo = 'label+percent', 
+    hoverinfo = 'text', # Setting text on hover (see text variable on next line)
+    text = ~paste(n, "Respondents"), # Setting text on hover
+    marker = list(colors = colors1)) %>% # Setting up colors for clarity
+  layout(title = "Responses")
+```
+
+Do the ones with a family history of mental illness seek treatment?
+```{r}
+ggplot(data=data1, aes(x=family_history, fill = treatment)) +geom_bar() +theme_light() +scale_fill_brewer(palette="Set2")
+
+```
+
+If the worker is willing to discuss the mental health issue with the supervisor, is he or she more probable to seek treatment?
+```{r}
+
+ggplot(data=data1, aes(x=supervisor, fill = treatment)) +geom_bar() +theme_light() +scale_fill_brewer(palette="Set3")
+
+```
+
+
+
+Does the anonymity of the worker affect the individual seeking treatment?
+```{r}
+ggplot(data=data1, aes(x=anonymity, fill = treatment)) +geom_bar() +theme_light() +scale_fill_brewer(palette="Set2")
+```
+
+Do the consequences of seeking mental help affect the worker seeking treatment?
+```{r}
+ggplot(data=data1, aes(x=obs_consequence, fill = treatment)) +geom_bar() +theme_light() +scale_fill_brewer(palette="Set1")
+```
+
+How seriously are issues related to mental health taken in comparison to physical health, in tech and non-tech companies:
+```{r}
+ggplot(data=data1, aes(x=mental_vs_physical,  fill = tech_company)) +geom_bar() +theme_light() +scale_fill_brewer(palette="Set2")
+```
+
+Some functions that can be resued later.
+```{r}
+# #Define some functions that can be resued later.
+# 
+# getNumericColumns<-function(t){
+#     tn = sapply(t,function(x){is.numeric(x)})
+#     return(names(tn)[which(tn)])
+# }
+# 
+# getFactorColumns<-function(t){
+#     tn = sapply(t,function(x){is.factor(x)})
+#     return(names(tn)[which(tn)])
+# }
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+## Model building:
 Out of the 1251 samples, we are reserving 1000 samples for training and 251 samples for testing.
 ```{r}
 set.seed(1)
@@ -99,11 +211,7 @@ y.test <- health.test$treatment
 success <- data.frame(methods=c("Logistic Regression","Single Tree", "Random Forest","Bagging"), percentages=c(0,0,0,0))
 ```
 
-Linear model:
 
-```{r}
-#???
-```
 
 Logistic regression:
 ```{r}
@@ -180,17 +288,30 @@ success$percentages[success$methods == "Single Tree"] <- (100 - 100*fit.single$e
 
 Random forests:
 ```{r}
-
-health.rf <- train(treatment~., data=health.train, method="rf",
-metric="Accuracy", ntree=20) plot(health.rf) predict.rf <- predict(health.rf,
-health.test)
-
+health.rf <- train(treatment~., data=health.train, method="rf",metric="Accuracy", ntree=20)
+plot(health.rf) 
+predict.rf <- predict(health.rf,health.test)
 #Accuracy
 confusionMatrix(predict.rf, health.test$treatment)$overall[1]
-
 success$percentages[success$methods == "Random Forest"] <- confusionMatrix(predict.rf, health.test$treatment)$overall[1]*100
 
 ```
+
+Neural nets:
+```{r}
+# Let us first calculate the number of hidden layers/nodes and the decay parameters
+# size: number of intermediate hidden nodes
+# decay: parameter to avoid overfitting
+parameter <- train( treatment ~ . , data=health.train, method="nnet", trace=F)
+size <- parameter$bestTune$size
+decay <- parameter$bestTune$decay
+
+# Neural net model:
+model.nn <- nnet(treatment ~ ., size=size, decay=decay, trace=F, data=health.train)
+predict.nn <- predict(model, health.test, type = "class")
+sum(predict.nn==y.test)/length(predict.nn) #Accuracy
+```
+
 
 Bagging:
 
