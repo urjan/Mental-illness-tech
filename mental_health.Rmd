@@ -67,7 +67,7 @@ dim(data1)
 data1 = subset(data1, select=-c(Gender, Timestamp, comments))
 data1 <- data1 %>% rename(Gender = newgender )
 names(data1)
-na.omit(data1)
+#na.omit(data1)
 dim(data1)
 sapply(data1, class)
 ```
@@ -98,13 +98,11 @@ We have close to even distribution of data with respect to individuals seeking t
 
 
 
-
 What is the percentage of folks with a Family history of mental illnesses?
 ```{r}
 
 colors1 <- c("No" = "#fffff", "Yes" = "qqqqq", "Maybe" = "#11111", "Not sure" = "#11111", "Don't know" = "#11111")
  
-
 data1 %>%
   count(family_history) %>% 
   plot_ly(
@@ -131,7 +129,6 @@ If the worker is willing to discuss the mental health issue with the supervisor,
 ggplot(data=data1, aes(x=supervisor, fill = treatment)) +geom_bar() +theme_light() +scale_fill_brewer(palette="Set3")
 
 ```
-
 
 
 Does the anonymity of the worker affect the individual seeking treatment?
@@ -208,9 +205,8 @@ y.test <- health.test$treatment
 
 ```{r}
 #Creating a dataframe to save results of each method in order to plot a graph
-success <- data.frame(methods=c("Logistic Regression","Single Tree", "Random Forest","Bagging"), percentages=c(0,0,0,0))
+success <- data.frame(methods=c("Logistic Regression","Single Tree", "Random Forest","Bagging","Neural Nets"), percentages=c(0,0,0,0,0))
 ```
-
 
 
 Logistic regression:
@@ -308,27 +304,23 @@ decay <- parameter$bestTune$decay
 
 # Neural net model:
 model.nn <- nnet(treatment ~ ., size=size, decay=decay, trace=F, data=health.train)
-predict.nn <- predict(model, health.test, type = "class")
+predict.nn <- predict(model.nn, health.test, type = "class")
 sum(predict.nn==y.test)/length(predict.nn) #Accuracy
+success$percentages[success$methods == "Neural Nets"] <- confusionMatrix(predict.nn,health.test$treatment)$overall[1]*100
 ```
-
 
 Bagging:
 
 ```{r}
 bag.model <- bagging(treatment ~ .,  data=health.train)
 predict.bag <- predict(bag.model, health.test, type="class")
-sum(predict.bag!=y.test)/length(predict.bag)
-confusionMatrix(predict.bag, health.test$treatment)$overall
-
-
-sum(predict.bag!=y.test)/length(predict.bag)
+confusionMatrix(predict.bag$class, health.test$treatment)$overall[1]
 success$percentages[success$methods == "Bagging"] <- confusionMatrix(predict.bag$class, health.test$treatment)$overall[1]*100
 
 ```
 Lets plot our success rates for different methods:
 
 ```{r}
-
-ggplot(success, aes(x=methods, y=percentages)) + geom_bar(stat="identity", fill=c("yellowgreen", "hotpink2", "dodgerblue3", "orange2"), width = 0.2) + coord_flip() + theme(legend.position = "none") + geom_text(aes(label = format(round(percentages, 2), nsmall = 2)), size = 3, hjust = 3, vjust = 3)
+success
+ggplot(success, aes(x=methods, y=percentages)) + geom_bar(stat="identity", fill=c("yellowgreen", "hotpink2", "dodgerblue3", "orange2","Red"), width = 0.2) + coord_flip() + theme(legend.position = "none") + geom_text(aes(label = format(round(percentages, 2), nsmall = 2)), size = 3, hjust = 3, vjust = 3)
 ```
