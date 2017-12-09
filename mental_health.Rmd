@@ -88,17 +88,17 @@ pie
 ```
 Clearly, our data is skewed in favor of the tech companies.
 
-Let us se the distribution of data with respect to the number individuals seeking treatment for mental illnesses:
+Let us see the distribution of data with respect to the number of individuals seeking treatment for mental illnesses:
 ```{r}
 bar <- ggplot(data=data1, aes(x = sum(treatment =="Yes"), fill = treatment)) + geom_bar(width = 0.2) +coord_fixed(ratio = 0.2) 
 pie <- bar + coord_polar("y", start=0) + theme_void() + scale_fill_manual(values=c("#999999", "#E69F00"))
 pie
 ```
-We have close to even distribution of data with respect to individuals seeking treatment.
+We have close to an even distribution of data with respect to the individuals seeking treatment.
 
 
 
-What is the percentage of folks with a Family history of mental illnesses?
+What is the percentage of folks with a family history of mental illnesses?
 ```{r}
 
 colors1 <- c("No" = "#fffff", "Yes" = "qqqqq", "Maybe" = "#11111", "Not sure" = "#11111", "Don't know" = "#11111")
@@ -146,9 +146,9 @@ How seriously are issues related to mental health taken in comparison to physica
 ggplot(data=data1, aes(x=mental_vs_physical,  fill = tech_company)) +geom_bar() +theme_light() +scale_fill_brewer(palette="Set2")
 ```
 
-Some functions that can be resued later.
+Some functions that can be reused later.
 ```{r}
-# #Define some functions that can be resued later.
+# #Define some functions that can be reused later.
 # 
 # getNumericColumns<-function(t){
 #     tn = sapply(t,function(x){is.numeric(x)})
