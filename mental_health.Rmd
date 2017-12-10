@@ -187,12 +187,12 @@ Some functions that can be reused later.
 
 
 ## Model building:
-Out of the 1251 samples, we are reserving 1000 samples for training and 251 samples for testing.
+Out of the 1251 samples, we are reserving 875(70%) samples for training and 376(30%) samples for testing.
 ```{r}
 set.seed(1)
 n <- nrow(data1)
 
-train.index <- sample(n,1000)
+train.index <- sample(n,875)
 health.train <- data1[train.index,]
 health.test <- data1[-train.index,]
 
