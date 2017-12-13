@@ -1,0 +1,431 @@
+---
+title: "Mental Health in Tech"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+Inlcude all the libraries here:
+```{r results="hide"}
+if (!require("pacman")) install.packages("pacman")
+pacman::p_load(adabag)
+install.packages("leaps")
+library(leaps)
+library(data.table)
+library(dplyr)
+library(randomForest)
+library(ggplot2)
+library(adabag)
+library(corrplot)
+library(caret)
+library(pROC)
+library(tree)
+library(car)
+library(rpart)
+library(glmnet)
+library(plotly)
+library(corrplot)
+install.packages(nnet)
+library(nnet)
+install.packages("randomForest")
+library(ISLR)
+library(randomForest)
+```
+
+###Exploratory Data Analysis:
+
+Let us first read and understand the data:
+
+```{r}
+
+datahealth <- read.csv("survey.csv", header=T)
+```
+
+```{r}
+summary(datahealth)
+data1 <- datahealth
+dim(datahealth)
+names(data1)
+```
+
+```{r}
+
+#CHANGE!!!!
+GenMale <- c("cis male", "Cis Male", "Cis Man", "m", "M", "Mail", "maile", "Make", "Mal", "male", "Male", "Male ", "Male (CIS)", "Malr", "Man", "msle")
+GenFemale <- c("cis-female/femme", "Cis Female", "f", "F", "femail", "Femake", "female", "Female", "Female ", "Female (cis)", "Female (trans)", "Trans-female", "Trans woman", "woman", "Woman")
+ 
+# Assigning the entries according to "categories"
+data1$newgender <- ifelse((data1$Gender %in% GenMale), "Male", # Assigning "Male" to those who entered a string contained in GenMale
+  ifelse((data1$Gender %in% GenFemale), "Female", "Non-M/F")) %>% # Assigning "Female" to those who entered a string contained in GenFemale 
+  as.factor()
+ 
+# Observing cleaned table
+table(data1$newgender)
+
+```
+```{r}
+#Clean the age column to eliminate spurious values like negatives and ages above 120
+data1 = data1[(data1$Age > 15) & (data1$Age < 120),]
+dim(data1)
+data1 = subset(data1, select=-c(Gender, Timestamp, comments))
+data1 <- data1 %>% rename(Gender = newgender )
+names(data1)
+#na.omit(data1)
+dim(data1)
+sapply(data1, class)
+```
+```{r}
+names(data1)
+data1$work_interfere <- as.character(data1$work_interfere)
+data1$work_interfere[is.na(data1$work_interfere)] <- "Never"
+data1$work_interfere <- as.factor(data1$work_interfere)
+summary(data1$work_interfere)
+```
+
+
+Let us see the distribution of data with respect to tech and non-tech companies:
+```{r}
+#Check the distribution of ages
+mean(data1$Age)
+data1[which(data1$Age <= 15), "Age"] <- median(data1$Age)
+#Categorization of Age Variable
+# Age is one of the few non-categorical predictors in the study
+ggplot(data1, aes(Age)) + geom_bar() + theme_light() +scale_fill_brewer(palette="Set2")
+
+bar <- ggplot(data=data1, aes(x = sum(tech_company =="Yes"), fill = tech_company)) + geom_bar(width = 0.2) +coord_fixed(ratio = 0.2)
+pie <- bar + coord_polar("y", start=0) +theme_void()
+pie
+```
+Clearly, our data is skewed in favor of the tech companies.
+
+Let us see the distribution of data with respect to the number of individuals seeking treatment for mental illnesses:
+```{r}
+bar <- ggplot(data=data1, aes(x = sum(treatment =="Yes"), fill = treatment)) + geom_bar(width = 0.2) +coord_fixed(ratio = 0.2) 
+pie <- bar + coord_polar("y", start=0) + theme_void() + scale_fill_manual(values=c("#999999", "#E69F00"))
+pie
+```
+We have close to an even distribution of data with respect to the individuals seeking treatment.
+
+
+
+What is the percentage of folks with a family history of mental illnesses?
+```{r}
+
+colors1 <- c("No" = "#fffff", "Yes" = "qqqqq", "Maybe" = "#11111", "Not sure" = "#11111", "Don't know" = "#11111")
+ 
+data1 %>%
+  count(family_history) %>% 
+  plot_ly(
+    labels = ~family_history,
+    values = ~n,
+    type = "pie",
+    textposition = 'inside',
+    textinfo = 'label+percent', 
+    hoverinfo = 'text', # Setting text on hover (see text variable on next line)
+    text = ~paste(n, "Respondents"), # Setting text on hover
+    marker = list(colors = colors1)) %>% # Setting up colors for clarity
+  layout(title = "Responses")
+```
+
+Do the ones with a family history of mental illness seek treatment?
+```{r}
+ggplot(data=data1, aes(x=family_history, fill = treatment)) +geom_bar() +theme_light() +scale_fill_brewer(palette="Set2")
+
+```
+
+If the worker is willing to discuss the mental health issue with the supervisor, is he or she more probable to seek treatment?
+```{r}
+
+ggplot(data=data1, aes(x=supervisor, fill = treatment)) +geom_bar() +theme_light() +scale_fill_brewer(palette="Set3")
+
+```
+
+
+Does the anonymity of the worker affect the individual seeking treatment?
+```{r}
+ggplot(data=data1, aes(x=anonymity, fill = treatment)) +geom_bar() +theme_light() +scale_fill_brewer(palette="Set2")
+```
+
+Do the consequences of seeking mental help affect the worker seeking treatment?
+```{r}
+ggplot(data=data1, aes(x=obs_consequence, fill = treatment)) +geom_bar() +theme_light() +scale_fill_brewer(palette="Set1")
+```
+
+How seriously are issues related to mental health taken in comparison to physical health, in tech and non-tech companies:
+```{r}
+ggplot(data=data1, aes(x=mental_vs_physical,  fill = tech_company)) +geom_bar() +theme_light() +scale_fill_brewer(palette="Set2")
+```
+
+Some functions that can be reused later.
+```{r}
+# #Define some functions that can be reused later.
+# 
+# getNumericColumns<-function(t){
+#     tn = sapply(t,function(x){is.numeric(x)})
+#     return(names(tn)[which(tn)])
+# }
+# 
+# getFactorColumns<-function(t){
+#     tn = sapply(t,function(x){is.factor(x)})
+#     return(names(tn)[which(tn)])
+# }
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+## Model building:
+Out of the 1251 samples, we are reserving 875(70%) samples for training and 376(30%) samples for testing.
+```{r}
+set.seed(1)
+n <- nrow(data1)
+
+train.index <- sample(n,875)
+health.train <- data1[train.index,]
+health.test <- data1[-train.index,]
+
+x.train <- health.train[,-6]
+y.train <- health.train$treatment
+
+x.test <- health.test[,-6]
+y.test <- health.test$treatment
+```
+
+```{r}
+#Creating a dataframe to save results of each method in order to plot a graph
+success <- data.frame(methods=c("Logistic Regression","Single Tree", "Random Forest","Bagging","Neural Nets"), percentages=c(0,0,0,0,0))
+```
+
+
+Logistic regression:
+```{r}
+fit0 <- glm(treatment~ ., data = health.train, family=binomial(logit))
+anova(fit0) #Perform Anova to get significant variables 
+```
+Since state and self_employed have NA values but are not significant at the 0.05 level, we can remove these columns from our data.
+
+```{r}
+data1 <- data1[, -c(3,4)]
+health.train <- health.train[, -c(3,4)]
+health.test <- health.test[, -c(3,4)]
+x.train <- x.train[, -c(3,4)]
+x.test <- x.test[, -c(3,4)]
+```
+
+
+Picking out only the significant variables, we get a better model with the variables - family_history, work_interfere, benefits, care_options, seek_help, anonymity.
+
+```{r}
+
+fit1 <- glm(treatment ~ family_history + work_interfere + benefits + care_options + seek_help + anonymity, data = health.train, family=binomial(logit))
+anova(fit1) #Anonymity is not significant. Remove it.
+
+fit2 <- glm(treatment ~ family_history + work_interfere + benefits + care_options + seek_help , data = health.train, family=binomial(logit))
+anova(fit2) #seek_help is not significant. Remove it. 
+
+fit3 <- glm(treatment ~ family_history + work_interfere + benefits + care_options  , data = health.train, family=binomial(logit))
+anova(fit3) #All variables significant at 0.05 level
+
+fit1.roc <- roc(health.train$treatment, fit1$fitted, plot=F)
+fit2.roc <- roc(health.train$treatment, fit2$fitted, plot=F)
+fit3.roc <- roc(health.train$treatment, fit3$fitted, plot=F)
+#Not much difference between the 3 fits.
+plot(1-fit1.roc$specificities, fit1.roc$sensitivities, col="red", pch=16, cex=.7,
+     xlab="False Positive",
+     ylab="Sensitivity")
+points(1-fit2.roc$specificities, fit2.roc$sensitivities, col="blue", pch=16, cex=.6)
+points(1-fit3.roc$specificities, fit3.roc$sensitivities, col="green", pch=16, cex=.6)
+
+title("Red is for fit1, blue is for fit2, and green is for fit3")
+# roccurve <- roc(health.test$treatment ~ predict(fit3, health.test))
+# plot(roccurve)
+fit3
+fit.pred <- rep("No", 1000)
+fit.pred
+summary(fit.pred)
+fit.pred[fit3$fitted > 2/3]="Yes"
+MCE = (sum((fit.pred[health.train$treatment == "Yes"] != "Yes"))
+         + sum((fit.pred[health.train$treatment == "No"] != "No")))/length(health.train$treatment)
+MCE #0.191
+success$percentages[success$methods == "Logistic Regression"] <- (100 - MCE*100)
+
+```
+
+Single tree:
+
+```{r}
+set.seed(1)
+fit.single <- randomForest(treatment~., health.train, mtry=2, ntree=1)
+fit.single
+```
+Call:
+ randomForest(formula = treatment ~ ., data = health.train, mtry = 2,      ntree = 1) 
+               Type of random forest: classification
+                     Number of trees: 1
+No. of variables tried at each split: 2
+
+        OOB estimate of  error rate: 38.24%
+Confusion matrix:
+     No Yes class.error
+No  151  11  0.06790123
+Yes 111  46  0.70700637
+```{r}
+names(fit.single)
+fit.single$mtry
+fit.single$votes[1:20, ]   #  prob of 0 and 1 using oob's
+fit.single$predicted[1:20] #  lables using oob's and majority vote. Notice those with NA because they are not in any OOB's
+fit.single$err.rate[1,]["OOB"]  #  mis-classification errors of oob's/0/1
+predict(fit.single, health.test)[1:20]  # prediction by using the RF based on all the training data.
+
+data.frame(fit.single$votes[1:20, ], fit.single$predicted[1:20], predict(fit.single, health.test)[1:20] )
+
+success$percentages[success$methods == "Single Tree"] <- (100 - 100*fit.single$err.rate[1,]["OOB"])
+fit.single
+
+```
+
+Random forests:
+```{r}
+health.rf <- train(treatment~., data=health.train, method="rf",metric="Accuracy", ntree=20)
+health.rf
+plot(health.rf) 
+predict.rf <- predict(health.rf,health.test)
+predict.rf
+#Accuracy
+confusionMatrix(predict.rf, health.test$treatment)
+success$percentages[success$methods == "Random Forest"] <- confusionMatrix(predict.rf, health.test$treatment)$overall[1]*100
+summary(health.rf)
+importance(health.rf)
+
+```
+Random Forest 
+
+875 samples
+ 22 predictor
+  2 classes: 'No', 'Yes' 
+
+No pre-processing
+Resampling: Bootstrapped (25 reps) 
+Summary of sample sizes: 875, 875, 875, 875, 875, 875, ... 
+Resampling results across tuning parameters:
+
+  mtry  Accuracy   Kappa    
+   2    0.6693477  0.3371791
+  46    0.7937240  0.5875035
+  90    0.7829297  0.5662881
+
+Accuracy was used to select the optimal model using the largest value.
+The final value used for the model was mtry = 46.
+
+Confusion Matrix and Statistics
+
+          Reference
+Prediction  No Yes
+       No  142  35
+       Yes  31 168
+                                          
+               Accuracy : 0.8245          
+                 95% CI : (0.7822, 0.8616)
+    No Information Rate : 0.5399          
+    P-Value [Acc > NIR] : <2e-16          
+                                          
+                  Kappa : 0.6473          
+ Mcnemar's Test P-Value : 0.7119          
+                                          
+            Sensitivity : 0.8208          
+            Specificity : 0.8276          
+         Pos Pred Value : 0.8023          
+         Neg Pred Value : 0.8442          
+             Prevalence : 0.4601          
+         Detection Rate : 0.3777          
+   Detection Prevalence : 0.4707          
+      Balanced Accuracy : 0.8242          
+                                          
+       'Positive' Class : No    
+
+Confusion Matrix and Statistics
+
+          Reference
+Prediction  No Yes
+       No  139  35
+       Yes  34 168
+                                          
+               Accuracy : 0.8165          
+                 95% CI : (0.7736, 0.8543)
+    No Information Rate : 0.5399          
+    P-Value [Acc > NIR] : <2e-16          
+                                          
+                  Kappa : 0.6308          
+ Mcnemar's Test P-Value : 1               
+                                          
+            Sensitivity : 0.8035          
+            Specificity : 0.8276          
+         Pos Pred Value : 0.7989          
+         Neg Pred Value : 0.8317          
+             Prevalence : 0.4601          
+         Detection Rate : 0.3697          
+   Detection Prevalence : 0.4628          
+      Balanced Accuracy : 0.8155          
+                                          
+       'Positive' Class : No      
+Neural nets:
+```{r}
+# Let us first calculate the number of hidden layers/nodes and the decay parameters
+# size: number of intermediate hidden nodes
+# decay: parameter to avoid overfitting
+parameter <- train( treatment ~ . , data=health.train, method="nnet", trace=F)
+size <- parameter$bestTune$size
+decay <- parameter$bestTune$decay
+decay
+parameter
+size
+
+# Neural net model:
+model.nn <- nnet(treatment ~ ., size=size, decay=decay, trace=F, data=health.train)
+model.nn
+predict.nn <- predict(model.nn, health.test, type = "class")
+predict.nn
+sum(predict.nn==y.test)/length(predict.nn) #Accuracy
+success$percentages[success$methods == "Neural Nets"] <- confusionMatrix(predict.nn,health.test$treatment)$overall[1]*100
+success
+```
+ 
+Bagging:
+
+```{r}
+bag.model <- bagging(treatment ~ .,  data=health.train)
+predict.bag <- predict(bag.model, health.test, type="class")
+confusionMatrix(predict.bag$class, health.test$treatment)$overall[1]
+success$percentages[success$methods == "Bagging"] <- confusionMatrix(predict.bag$class, health.test$treatment)$overall[1]*100
+
+```
+Lets plot our success rates for different methods:
+
+```{r}
+success
+ggplot(success, aes(x=methods, y=percentages)) + geom_bar(stat="identity", fill=c("yellowgreen", "hotpink2", "dodgerblue3", "orange2","Red"), width = 0.2) + coord_flip() + theme(legend.position = "none") + geom_text(aes(label = format(round(percentages, 2), nsmall = 2)), size = 3, hjust = 3, vjust = 3)
+```
