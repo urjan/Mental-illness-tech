@@ -130,6 +130,12 @@ ggplot(data=data1, aes(x=supervisor, fill = treatment)) +geom_bar() +theme_light
 ```
 
 
+How does the employer providing resources for mental health affect an individual actaully seeking treatment?
+```{r}
+ggplot(data=data1, aes(x=seek_help,  fill = treatment)) +geom_bar() +theme_light() +scale_fill_brewer(palette="Set1")
+```
+
+
 Does the anonymity of the worker affect the individual seeking treatment?
 ```{r}
 ggplot(data=data1, aes(x=anonymity, fill = treatment)) +geom_bar() +theme_light() +scale_fill_brewer(palette="Set2")
@@ -145,6 +151,15 @@ How seriously are issues related to mental health taken in comparison to physica
 ggplot(data=data1, aes(x=mental_vs_physical,  fill = tech_company)) +geom_bar() +theme_light() +scale_fill_brewer(palette="Set2")
 ```
 
+Does the compnay size affect the employees being afftected with mental health issues?
+```{r}
+ggplot(data=data1, aes(x=work_interfere,  fill = no_employees)) +geom_bar() +theme_light() +scale_fill_brewer(palette="Set2")
+```
+
+Does the size of the company affect the awareness created about mental health in the organization?
+```{r}
+ggplot(data=data1, aes(x=seek_help,  fill = no_employees)) +geom_bar() +theme_light() +scale_fill_brewer(palette="Set2")
+```
 
 
 ## Model building:
