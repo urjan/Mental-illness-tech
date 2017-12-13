@@ -1,5 +1,5 @@
 ---
-title: "Mental Health in Tech"
+title: "Tech appendix"
 output: html_document
 ---
 
@@ -46,14 +46,13 @@ names(data1)
 
 ```{r}
 
-#CHANGE!!!!
-GenMale <- c("cis male", "Cis Male", "Cis Man", "m", "M", "Mail", "maile", "Make", "Mal", "male", "Male", "Male ", "Male (CIS)", "Malr", "Man", "msle")
-GenFemale <- c("cis-female/femme", "Cis Female", "f", "F", "femail", "Femake", "female", "Female", "Female ", "Female (cis)", "Female (trans)", "Trans-female", "Trans woman", "woman", "Woman")
+male <- c( "Cis Male", "Cis Man", "m","cis male", "M", "maile", "Make", "Mal", "Mail", "male", "Male", "Male ", "Male (CIS)", "Malr", "Man", "msle")
+female <- c( "Cis Female", "f", "F", "femail", "Femake", "female", "Female", "Female ", "Female (cis)", "Female (trans)", "Trans-female", "Trans woman", "woman","cis-female/femme", "Woman")
  
 # Assigning the entries according to "categories"
 data1$newgender <-
-  ifelse((data1$Gender %in% GenMale), "Male", # Assigning "Male" to those who entered a string contained in GenMale
-  ifelse((data1$Gender %in% GenFemale), "Female", "Non-M/F")) %>% # Assigning "Female" to those who entered a string contained in GenFemale
+  ifelse((data1$Gender %in% male), "Male", # Assigning "Male" to those who entered a string contained in male
+  ifelse((data1$Gender %in% female), "Female", "Non-M/F")) %>% # Assigning "Female" to those who entered a string contained in female
   as.factor()
  
 # Observing cleaned table
@@ -145,44 +144,6 @@ How seriously are issues related to mental health taken in comparison to physica
 ```{r}
 ggplot(data=data1, aes(x=mental_vs_physical,  fill = tech_company)) +geom_bar() +theme_light() +scale_fill_brewer(palette="Set2")
 ```
-
-Some functions that can be reused later.
-```{r}
-# #Define some functions that can be reused later.
-# 
-# getNumericColumns<-function(t){
-#     tn = sapply(t,function(x){is.numeric(x)})
-#     return(names(tn)[which(tn)])
-# }
-# 
-# getFactorColumns<-function(t){
-#     tn = sapply(t,function(x){is.factor(x)})
-#     return(names(tn)[which(tn)])
-# }
-
-```
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 
